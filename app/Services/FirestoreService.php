@@ -101,7 +101,9 @@ class FirestoreService
      */
     public function create(string $collection, array $data): ?array
     {
-        $response = Http::withOptions($this->sslOptions)->withToken($this->getAccessToken())
+        $token = $this->getAccessToken();
+        if (empty($token)) return null;
+        $response = Http::withOptions($this->sslOptions)->withToken($token)
             ->post("{$this->baseUrl}/{$collection}", [
                 'fields' => $this->encodeFields($data),
             ]);
@@ -119,7 +121,9 @@ class FirestoreService
      */
     public function set(string $collection, string $docId, array $data): bool
     {
-        $response = Http::withOptions($this->sslOptions)->withToken($this->getAccessToken())
+        $token = $this->getAccessToken();
+        if (empty($token)) return false;
+        $response = Http::withOptions($this->sslOptions)->withToken($token)
             ->patch("{$this->baseUrl}/{$collection}/{$docId}", [
                 'fields' => $this->encodeFields($data),
             ]);
@@ -136,13 +140,15 @@ class FirestoreService
      */
     public function update(string $collection, string $docId, array $data): bool
     {
+        $token = $this->getAccessToken();
+        if (empty($token)) return false;
         $fieldPaths = array_keys($data);
         $query      = implode('&', array_map(
             fn($f) => 'updateMask.fieldPaths=' . urlencode($f),
             $fieldPaths
         ));
 
-        $response = Http::withOptions($this->sslOptions)->withToken($this->getAccessToken())
+        $response = Http::withOptions($this->sslOptions)->withToken($token)
             ->patch("{$this->baseUrl}/{$collection}/{$docId}?{$query}", [
                 'fields' => $this->encodeFields($data),
             ]);
@@ -159,7 +165,9 @@ class FirestoreService
      */
     public function delete(string $collection, string $docId): bool
     {
-        $response = Http::withOptions($this->sslOptions)->withToken($this->getAccessToken())
+        $token = $this->getAccessToken();
+        if (empty($token)) return false;
+        $response = Http::withOptions($this->sslOptions)->withToken($token)
             ->delete("{$this->baseUrl}/{$collection}/{$docId}");
 
         if (!$response->successful() && $response->status() !== 404) {
@@ -372,9 +380,8 @@ class FirestoreService
             $keyFile = storage_path('app/firebase-service-account.json');
 
             if (!file_exists($keyFile)) {
-                throw new \RuntimeException(
-                    'Firebase service account not found at storage/app/firebase-service-account.json'
-                );
+                Log::warning('FirestoreService: firebase-service-account.json not found — Firestore sync disabled.');
+                return '';
             }
 
             $sa  = json_decode(file_get_contents($keyFile), true);
