@@ -12,6 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // Trust all proxies (Railway reverse proxy) so HTTPS is detected correctly
+        $middleware->trustProxies(at: '*');
+
         $middleware->alias([
             'admin'           => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'reseller'        => \App\Http\Middleware\EnsureResellerIsActive::class,
