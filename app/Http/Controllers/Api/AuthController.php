@@ -55,6 +55,14 @@ class AuthController extends Controller
             'phone'    => 'required|string|max:20|unique:users,phone',
             'password' => 'required|string|min:6',
             'city'     => 'required|string|max:50',
+        ], [
+            'name.required'     => 'الاسم مطلوب.',
+            'name.max'          => 'الاسم طويل جداً.',
+            'phone.required'    => 'رقم الهاتف مطلوب.',
+            'phone.unique'      => 'رقم الهاتف مسجل مسبقاً.',
+            'password.required' => 'كلمة المرور مطلوبة.',
+            'password.min'      => 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.',
+            'city.required'     => 'المدينة مطلوبة.',
         ]);
 
         if ($validator->fails()) {
