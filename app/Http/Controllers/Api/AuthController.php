@@ -93,10 +93,8 @@ class AuthController extends Controller
             'phone'   => $user->phone,
         ];
 
-        // DEV ONLY: expose OTP so testers don't need SMS
-        if (app()->environment('local')) {
-            $response['otp'] = $otp;
-        }
+        // TODO: remove OTP from response before public launch
+        $response['otp'] = $otp;
 
         return response()->json($response, 201);
     }
@@ -219,10 +217,8 @@ class AuthController extends Controller
 
         $response = ['message' => 'تم إرسال رمز التحقق'];
 
-        // DEV ONLY: expose OTP so testers don't need SMS
-        if (app()->environment('local')) {
-            $response['otp'] = $otp;
-        }
+        // TODO: remove OTP from response before public launch
+        $response['otp'] = $otp;
 
         return response()->json($response);
     }
