@@ -27,9 +27,13 @@ class SeedFirestoreCommand extends Command
 
     protected $description = 'Migrate MySQL data → Firestore (write-through initial seed)';
 
-    public function __construct(private FirestoreService $fs)
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
     {
         parent::__construct();
+        $this->fs = $fs;
     }
 
     public function handle(): int

@@ -20,17 +20,19 @@ use Illuminate\Support\Facades\Log;
  */
 class FirestoreService
 {
-    private string $projectId;
-    private string $baseUrl;
-    private array  $sslOptions;
+    /** @var string */
+    private $projectId;
+
+    /** @var string */
+    private $baseUrl;
+
+    /** @var array */
+    private $sslOptions;
 
     public function __construct()
     {
         $this->projectId = config('services.firebase.project_id', '');
-        $this->baseUrl   = "https://firestore.googleapis.com/v1/projects/{$this->projectId}/databases/(default)/documents";
-
-        // Disable SSL peer verification for local Windows dev (Guzzle cURL on Windows
-        // cannot resolve Google's CA chain reliably without a system cert store).
+        $this->baseUrl   = 'https://firestore.googleapis.com/v1/projects/' . $this->projectId . '/databases/(default)/documents';
         $this->sslOptions = ['verify' => false];
     }
 

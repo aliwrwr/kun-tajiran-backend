@@ -18,13 +18,16 @@ use Illuminate\Support\Facades\Log;
  */
 class FcmService
 {
-    private string $projectId;
-    private string $fcmUrl;
+    /** @var string */
+    private $projectId;
+
+    /** @var string */
+    private $fcmUrl;
 
     public function __construct()
     {
         $this->projectId = config('services.firebase.project_id', '');
-        $this->fcmUrl    = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
+        $this->fcmUrl    = 'https://fcm.googleapis.com/v1/projects/' . $this->projectId . '/messages:send';
     }
 
     // ──────────────────────────────────────────────────────
