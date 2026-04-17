@@ -9,7 +9,13 @@ use Illuminate\Http\JsonResponse;
 
 class HomeController extends Controller
 {
-    public function __construct(private FirestoreService $fs) {}
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
+    {
+        $this->fs = $fs;
+    }
 
     public function index(): JsonResponse
     {

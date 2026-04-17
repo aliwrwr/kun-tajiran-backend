@@ -9,7 +9,13 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function __construct(private FirestoreService $fs) {}
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
+    {
+        $this->fs = $fs;
+    }
 
     /**
      * List all active products (with optional category filter & search) — reads from Firestore

@@ -15,7 +15,13 @@ use Illuminate\Support\Facades\Validator;
 
 class OrderController extends Controller
 {
-    public function __construct(private FirestoreService $fs) {}
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
+    {
+        $this->fs = $fs;
+    }
 
     private const IRAQI_CITIES = [
         'بغداد', 'البصرة', 'الموصل', 'أربيل', 'كركوك', 'النجف', 'كربلاء',

@@ -12,7 +12,13 @@ use Illuminate\Support\Facades\Storage;
 
 class CategoryController extends Controller
 {
-    public function __construct(private FirestoreService $fs) {}
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
+    {
+        $this->fs = $fs;
+    }
     public function index(): View
     {
         $perPage    = in_array((int) request('per_page'), [5, 10, 50, 100, 500]) ? (int) request('per_page') : 20;

@@ -12,7 +12,13 @@ use Illuminate\Support\Facades\DB;
 
 class OrderController extends Controller
 {
-    public function __construct(private FirestoreService $fs) {}
+    /** @var FirestoreService */
+    private $fs;
+
+    public function __construct(FirestoreService $fs)
+    {
+        $this->fs = $fs;
+    }
     public function index(Request $request)
     {
         $query = Order::with(['reseller', 'deliveryAgent.user'])->latest();
