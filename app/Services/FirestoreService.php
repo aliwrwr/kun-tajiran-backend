@@ -401,7 +401,8 @@ class FirestoreService
             $privateKey   = openssl_pkey_get_private($sa['private_key']);
 
             if (!$privateKey) {
-                throw new \RuntimeException('Invalid private key in service account JSON.');
+                Log::error('FirestoreService: Invalid private key in service account JSON.');
+                return '';
             }
 
             openssl_sign($signingInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
@@ -413,7 +414,8 @@ class FirestoreService
             ]);
 
             if (!$response->successful()) {
-                throw new \RuntimeException('Firestore token exchange failed: ' . $response->body());
+                Log::error('FirestoreService: token exchange failed: ' . $response->body());
+                return '';
             }
 
             return $response->json('access_token');
