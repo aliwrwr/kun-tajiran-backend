@@ -376,50 +376,58 @@ class FirestoreService
 
     private function getAccessToken(): string
     {
-        return Cache::remember('firestore_access_token', 55 * 60, function () {
-            $keyFile = storage_path('app/firebase-service-account.json');
+        // Return cached token if still valid
+        $cached = Cache::get('firestore_access_token');
+        if (!empty($cached)) {
+            return $cached;
+        }
 
-            if (!file_exists($keyFile)) {
-                Log::warning('FirestoreService: firebase-service-account.json not found — Firestore sync disabled.');
-                return '';
-            }
+        $keyFile = storage_path('app/firebase-service-account.json');
 
-            $sa  = json_decode(file_get_contents($keyFile), true);
-            $now = time();
+        if (!file_exists($keyFile)) {
+            Log::warning('FirestoreService: firebase-service-account.json not found — Firestore sync disabled.');
+            return '';
+        }
 
-            $header  = $this->base64url(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
-            $payload = $this->base64url(json_encode([
-                'iss'   => $sa['client_email'],
-                // cloud-platform scope covers both Firestore and FCM
-                'scope' => 'https://www.googleapis.com/auth/cloud-platform',
-                'aud'   => 'https://oauth2.googleapis.com/token',
-                'iat'   => $now,
-                'exp'   => $now + 3600,
-            ]));
+        $sa  = json_decode(file_get_contents($keyFile), true);
+        $now = time();
 
-            $signingInput = "$header.$payload";
-            $privateKey   = openssl_pkey_get_private($sa['private_key']);
+        $header  = $this->base64url(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $payload = $this->base64url(json_encode([
+            'iss'   => $sa['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/cloud-platform',
+            'aud'   => 'https://oauth2.googleapis.com/token',
+            'iat'   => $now,
+            'exp'   => $now + 3600,
+        ]));
 
-            if (!$privateKey) {
-                Log::error('FirestoreService: Invalid private key in service account JSON.');
-                return '';
-            }
+        $signingInput = "$header.$payload";
+        $privateKey   = openssl_pkey_get_private($sa['private_key']);
 
-            openssl_sign($signingInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
-            $jwt = "$signingInput." . $this->base64url($signature);
+        if (!$privateKey) {
+            Log::error('FirestoreService: Invalid private key in service account JSON.');
+            return '';
+        }
 
-            $response = Http::withOptions($this->sslOptions)->asForm()->post('https://oauth2.googleapis.com/token', [
-                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-                'assertion'  => $jwt,
-            ]);
+        openssl_sign($signingInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+        $jwt = "$signingInput." . $this->base64url($signature);
 
-            if (!$response->successful()) {
-                Log::error('FirestoreService: token exchange failed: ' . $response->body());
-                return '';
-            }
+        $response = Http::withOptions($this->sslOptions)->asForm()->post('https://oauth2.googleapis.com/token', [
+            'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+            'assertion'  => $jwt,
+        ]);
 
-            return $response->json('access_token');
-        });
+        if (!$response->successful()) {
+            Log::error('FirestoreService: token exchange failed: ' . $response->body());
+            return '';
+        }
+
+        $token = $response->json('access_token');
+        // Only cache if we got a real token
+        if (!empty($token)) {
+            Cache::put('firestore_access_token', $token, 55 * 60);
+        }
+        return $token;
     }
 
     private function base64url(string $data): string
