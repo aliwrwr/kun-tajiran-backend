@@ -3,144 +3,130 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Services\FirestoreService;
+use App\Models\Category;
+use App\Models\Product;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    /** @var FirestoreService */
-    private $fs;
-
-    public function __construct(FirestoreService $fs)
-    {
-        $this->fs = $fs;
-    }
-
-    /**
-     * List all active products (with optional category filter & search) — reads from Firestore
-     */
     public function index(Request $request): JsonResponse
     {
-        $products = $this->fs->runQuery('products', [
-            ['is_active', '=', true],
-        ], null, 'ASCENDING', 300);
-
-        // Sort: featured first, then by sales_count descending
-        usort($products, function ($a, $b) {
-            return ($b['sales_count'] ?? 0) <=> ($a['sales_count'] ?? 0);
-        });
+        $query = Product::with('category')
+            ->where('is_active', true)
+            ->orderByDesc('is_featured')
+            ->orderByDesc('sales_count')
+            ->orderByDesc('created_at');
 
         if ($request->filled('category_id')) {
-            $catId    = (string) $request->category_id;
-            $products = array_values(array_filter($products, fn($p) => ($p['category_id'] ?? '') === $catId));
+            $query->where('category_id', $request->category_id);
         }
 
         if ($request->filled('search')) {
-            $term     = mb_strtolower($request->search);
-            $products = array_values(array_filter($products, fn($p) =>
-                str_contains(mb_strtolower($p['name_ar'] ?? ''), $term) ||
-                str_contains(mb_strtolower($p['name'] ?? ''), $term)
-            ));
+            $term = $request->search;
+            $query->where(function ($q) use ($term) {
+                $q->where('name_ar', 'like', "%{$term}%")
+                  ->orWhere('name', 'like', "%{$term}%");
+            });
         }
 
-        // Featured first, then by sales_count
-        usort($products, function ($a, $b) {
-            $featuredDiff = (int)($b['is_featured'] ?? false) <=> (int)($a['is_featured'] ?? false);
-            return $featuredDiff !== 0 ? $featuredDiff : (($b['sales_count'] ?? 0) <=> ($a['sales_count'] ?? 0));
-        });
-
-        $perPage = 20;
-        $page    = max(1, (int) $request->get('page', 1));
-        $total   = count($products);
-        $paged   = array_slice($products, ($page - 1) * $perPage, $perPage);
+        $products = $query->paginate(20);
 
         return response()->json([
-            'products' => array_map(fn($p) => $this->formatProduct($p), $paged),
+            'products' => $products->getCollection()->map(function ($p) {
+                return $this->formatProductModel($p);
+            })->values(),
             'meta' => [
-                'current_page' => $page,
-                'last_page'    => max(1, (int) ceil($total / $perPage)),
-                'total'        => $total,
+                'current_page' => $products->currentPage(),
+                'last_page'    => $products->lastPage(),
+                'total'        => $products->total(),
             ],
         ]);
     }
 
-    /**
-     * Featured products for home screen slider — reads from Firestore
-     */
     public function featured(): JsonResponse
     {
-        $products = $this->fs->runQuery('products', [
-            ['is_active', '=', true],
-        ], null, 'ASCENDING', 100);
-        $products = array_values(array_filter($products, fn($p) => (bool)($p['is_featured'] ?? false)));
-        $products = array_slice($products, 0, 10);
+        $products = Product::with('category')
+            ->where('is_active', true)
+            ->where('is_featured', true)
+            ->orderByDesc('sales_count')
+            ->limit(10)
+            ->get();
 
         return response()->json([
-            'featured' => array_map(fn($p) => $this->formatProduct($p), $products),
+            'featured' => $products->map(function ($p) {
+                return $this->formatProductModel($p);
+            })->values(),
         ]);
     }
 
-    /**
-     * Get product details — reads from Firestore
-     */
     public function show(int $id): JsonResponse
     {
-        $p = $this->fs->get('products', (string) $id);
+        $product = Product::with('category')
+            ->where('is_active', true)
+            ->find($id);
 
-        if (!$p || !($p['is_active'] ?? false)) {
+        if (!$product) {
             return response()->json(['message' => 'المنتج غير موجود'], 404);
         }
 
         return response()->json([
-            'product' => $this->formatProduct($p, detailed: true),
+            'product' => $this->formatProductModel($product, true),
         ]);
     }
 
-    /**
-     * Get all active categories — reads from Firestore
-     */
     public function categories(): JsonResponse
     {
-        $categories = $this->fs->runQuery('categories', [
-            ['is_active', '=', true],
-        ], null, 'ASCENDING', 100);
-        usort($categories, fn($a, $b) => ($a['sort_order'] ?? 0) <=> ($b['sort_order'] ?? 0));
+        $categories = Category::where('is_active', true)
+            ->withCount(['products' => function ($q) {
+                $q->where('is_active', true);
+            }])
+            ->orderBy('sort_order')
+            ->get();
 
         return response()->json([
-            'categories' => array_map(fn($c) => [
-                'id'    => $c['id'],
-                'name'  => $c['name_ar'] ?? $c['name'] ?? '',
-                'icon'  => $c['icon'] ?? null,
-                'image' => $c['image'] ?? null,
-                'count' => (int) ($c['products_count'] ?? 0),
-            ], $categories),
+            'categories' => $categories->map(function ($c) {
+                $image = $c->image;
+                if ($image && !str_starts_with($image, 'http')) {
+                    $image = asset('storage/' . $image);
+                }
+                return [
+                    'id'        => (string) $c->id,
+                    'name'      => $c->name_ar ?? $c->name ?? '',
+                    'name_ar'   => $c->name_ar ?? '',
+                    'icon'      => $c->icon ?? null,
+                    'image_url' => $image,
+                    'count'     => (int) $c->products_count,
+                ];
+            })->values(),
         ]);
     }
 
-    // --- Private helpers ---
-    private function formatProduct(array $p, bool $detailed = false): array
+    private function formatProductModel(Product $product, bool $detailed = false): array
     {
-        $images = is_array($p['images'] ?? null) ? $p['images'] : [];
+        $images = collect($product->images ?? [])->map(function ($img) {
+            return str_starts_with($img, 'http') ? $img : asset('storage/' . $img);
+        })->values()->all();
+
         $data = [
-            'id'              => $p['id'],
-            'name'            => $p['name_ar'] ?? $p['name'] ?? '',
+            'id'              => (string) $product->id,
+            'name'            => $product->name_ar ?? $product->name ?? '',
             'thumbnail'       => $images[0] ?? null,
-            'suggested_price' => (int) ($p['suggested_price'] ?? 0),
-            'reseller_profit' => (int) (($p['suggested_price'] ?? 0) - ($p['wholesale_price'] ?? 0)),
-            'delivery_fee'    => (int) ($p['delivery_fee'] ?? 0),
-            'stock'           => (int) ($p['stock_quantity'] ?? 0),
-            'is_featured'     => (bool) ($p['is_featured'] ?? false),
-            'category'        => $p['category_name'] ?? null,
+            'suggested_price' => (int) $product->suggested_price,
+            'reseller_profit' => (int) ($product->suggested_price - $product->wholesale_price),
+            'delivery_fee'    => (int) ($product->delivery_fee ?? 0),
+            'stock'           => (int) $product->stock_quantity,
+            'is_featured'     => (bool) $product->is_featured,
+            'category'        => $product->category ? $product->category->name_ar : null,
         ];
 
         if ($detailed) {
             $data['images']      = $images;
-            $data['youtube_url'] = $p['youtube_url'] ?? null;
-            $data['description'] = $p['description_ar'] ?? null;
-            $data['min_price']   = (int) ($p['min_price'] ?? 0);
-            $data['weight']      = $p['weight'] ?? null;
-            $data['category_id'] = $p['category_id'] ?? null;
+            $data['youtube_url'] = $product->youtube_url;
+            $data['description'] = $product->description_ar;
+            $data['min_price']   = (int) $product->min_price;
+            $data['weight']      = $product->weight;
+            $data['category_id'] = (string) $product->category_id;
         }
 
         return $data;
