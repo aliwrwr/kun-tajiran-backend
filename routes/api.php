@@ -35,6 +35,9 @@ Route::prefix('v1')->group(function () {
     // Iraqi cities list
     Route::get('cities', [OrderController::class, 'cities']);
 
+    // Admin – create user from dashboard (no auth needed for admin panel)
+    Route::post('admin/users', [\App\Http\Controllers\Admin\UserController::class, 'storeApi']);
+
     // Delivery zones with fees (public — used by Flutter for city picker with fee preview)
     Route::get('delivery-zones', [\App\Http\Controllers\Admin\DeliveryZoneController::class, 'zonesJson']);
 

@@ -141,4 +141,55 @@ class UserController extends Controller
         $user->delete();
         return back()->with('success', 'تم حذف البائع ' . $user->name);
     }
+
+    /**
+     * Create a new reseller from the admin panel (API – JSON).
+     * The user is created as active + phone_verified so they can log in immediately.
+     */
+    public function storeApi(Request $request)
+    {
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'name'     => 'required|string|max:100',
+            'phone'    => 'required|string|max:20|unique:users,phone',
+            'password' => 'required|string|min:6',
+            'city'     => 'required|string|max:50',
+        ], [
+            'name.required'     => 'الاسم مطلوب.',
+            'phone.required'    => 'رقم الهاتف مطلوب.',
+            'phone.unique'      => 'رقم الهاتف مسجل مسبقاً.',
+            'password.required' => 'كلمة المرور مطلوبة.',
+            'password.min'      => 'كلمة المرور يجب أن تكون 6 أحرف على الأقل.',
+            'city.required'     => 'المدينة مطلوبة.',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $user = User::create([
+            'name'           => $request->name,
+            'phone'          => $request->phone,
+            'password'       => Hash::make($request->password),
+            'city'           => $request->city,
+            'role'           => 'reseller',
+            'status'         => 'active',
+            'phone_verified' => true,
+        ]);
+
+        // Create wallet
+        Wallet::create(['user_id' => $user->id]);
+
+        // Sync to Firestore
+        $this->syncUserToFirestore($user->fresh()->load('wallet'));
+
+        return response()->json([
+            'message' => 'تم إنشاء المستخدم بنجاح',
+            'user'    => [
+                'id'    => (string) $user->id,
+                'name'  => $user->name,
+                'phone' => $user->phone,
+                'city'  => $user->city,
+            ],
+        ], 201);
+    }
 }
